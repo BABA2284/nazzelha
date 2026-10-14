@@ -1,57 +1,83 @@
 # Nazzelha | نزّلها
 
-**A mobile-first Arabic RTL media link utility** built to help users inspect supported public video URLs and download media they own or are authorized to save.
+A mobile-first Arabic RTL web app prototype for processing supported public video links and saving content the user owns or is authorized to download.
 
-> **Development status:** Early-stage project. The repository and deployment configuration are being prepared. End-to-end downloads from YouTube, Instagram, Facebook, and TikTok have not yet been verified in production.
+**Status: initial implementation committed; deployment and real-provider downloads still need verification.**
 
-## Goals
+## Features
 
-- Responsive Arabic-first interface designed for iPhone and mobile browsers.
-- Paste a supported public URL and inspect available media formats when the provider permits it.
-- Backend-mediated processing for supported URLs.
-- Clear download progress and helpful error states.
-- Temporary file handling and server-side configuration for sensitive values.
-- A deployable container-based backend.
+- Responsive Arabic RTL interface designed for iPhone and mobile browsers.
+- PWA manifest and service worker for adding the web app to the iPhone Home Screen.
+- Link metadata lookup and format selection for supported public URLs.
+- Background download jobs with progress status.
+- Password-protected API routes and short-lived download tickets.
+- File-size, video-duration, and active-job limits.
+- Docker-based runtime with FFmpeg.
+
+## Tech stack
+
+- **Frontend:** HTML, CSS, JavaScript, PWA
+- **Backend:** Python, FastAPI, Pydantic
+- **Media processing:** yt-dlp, FFmpeg
+- **Packaging/deployment:** Docker, Docker Compose, Render Blueprint
+
+## Supported providers
+
+The initial backend accepts URL domains for YouTube, Instagram, Facebook, and TikTok. Acceptance of a domain does **not** guarantee that every link works: providers change their systems, and private or login-gated media is not supported. Real end-to-end provider tests have not yet been completed.
+
+## Run locally
+
+Requirements: Docker Engine or Docker Desktop.
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace `APP_PASSWORD` with a strong, unique password. Then run:
+
+```bash
+docker compose up --build -d
+```
+
+Open `http://localhost:8000`. Health endpoint: `http://localhost:8000/api/health`.
+
+## Deploy to Render
+
+1. Open Render and choose **New → Blueprint**.
+2. Connect this GitHub repository and let Render read `render.yaml`.
+3. Set a strong, unique `APP_PASSWORD` as a secret environment variable.
+4. Deploy, then verify the `/api/health` endpoint and HTTPS site URL.
+
+The Blueprint currently requests a paid `starter` service. Review the current plan and pricing in Render before confirming deployment. A public repository does not need any passwords or API keys committed to it.
+
+## Add to iPhone Home Screen
+
+1. Open the deployed HTTPS URL in Safari.
+2. Tap **Share**.
+3. Choose **Add to Home Screen**, then **Add**.
 
 ## Responsible use
 
-Use this tool only for content you own or have permission to download, and in ways allowed by each platform's terms and applicable law. Nazzelha does not aim to bypass DRM, paywalls, private-account controls, or other access restrictions. Provider support can change at any time.
+Only download media you own or are authorized to save, and follow platform terms and applicable law. This project does not aim to bypass DRM, paywalls, private-account controls, or other access restrictions. Use official download options when required.
 
-## Planned architecture
+## Security notes
 
-- **Frontend:** Arabic RTL, responsive web UI suitable for adding to an iPhone Home Screen.
-- **Backend:** Python API to validate requests and coordinate supported media processing.
-- **Media processing:** FFmpeg where required and legally appropriate.
-- **Deployment:** Docker-compatible hosting with HTTPS.
+- Never commit `.env`, passwords, tokens, or production secrets.
+- Set `APP_PASSWORD` through the hosting provider's environment-variable settings.
+- Temporary downloads are stored on the server before being transferred to the device.
+- Review hosting storage, memory, CPU, request limits, and retention before public use.
+- This initial implementation has not yet undergone a full production security audit.
 
-The final technology list and commands should be updated to match the implementation after source files are committed and tested.
+## Project checklist
 
-## Security principles
-
-- Never commit API keys, passwords, access tokens, or production secrets.
-- Configure secrets using your hosting provider's environment-variable settings.
-- Use a strong, unique application password if password protection is enabled.
-- Restrict downloads to supported providers and validate remote URLs to reduce SSRF risk.
-- Apply file-size and runtime limits, clean up temporary files, and avoid storing user URLs longer than necessary.
-- Keep dependencies updated and test error handling before exposing a public deployment.
-
-## Development and deployment
-
-The source code and deploy instructions are being added in stages. Do not consider the service production-ready until the dependency installation, automated tests, real supported-URL download tests, HTTPS deployment, and resource limits have been verified.
-
-## Roadmap
-
-- [ ] Commit application source and dependency lock/configuration files.
-- [ ] Add automated tests for URL validation, authentication, and download lifecycle.
-- [ ] Add deployment configuration and environment-variable documentation.
-- [ ] Verify the build and API health check.
-- [ ] Test permitted public sample URLs from supported providers.
-- [ ] Add screenshots and a live demo after successful deployment.
-
-## Portfolio
-
-This project is being developed as a portfolio project. Feature claims, supported providers, and the live demo link will be updated only after they are verified.
+- [x] Initial API and responsive Arabic interface
+- [x] Docker and Render configuration
+- [x] Arabic and English project documentation
+- [ ] Add automated tests and continuous integration
+- [ ] Deploy and verify health check
+- [ ] Test allowed sample URLs on each provider
+- [ ] Add screenshots and a verified live demo
 
 ## License
 
-No license has been selected yet. Until a license is added, standard copyright applies and reuse permissions are not granted by default.
+No license has been selected. Unless a license is added, standard copyright applies and reuse is not granted by default.
