@@ -8,6 +8,7 @@ import secrets
 import shutil
 import threading
 import time
+import httpx
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,16 +16,26 @@ from uuid import uuid4
 
 import yt_dlp
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.sessions import SessionMiddleware
+from authlib.integrations.starlette_client import OAuth, OAuthError
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC_DIR = APP_DIR / "static"
 TEMP_ROOT = Path(os.getenv("DOWNLOAD_DIR", "/tmp/nazzelha-downloads"))
 TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip()
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "https://nazzelha.onrender.com").strip().rstrip("/")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+FACEBOOK_CLIENT_ID = os.getenv("FACEBOOK_CLIENT_ID", "").strip()
+FACEBOOK_CLIENT_SECRET = os.getenv("FACEBOOK_CLIENT_SECRET", "").strip()
+TIKTOK_CLIENT_KEY = os.getenv("TIKTOK_CLIENT_KEY", "").strip()
+TIKTOK_CLIENT_SECRET = os.getenv("TIKTOK_CLIENT_SECRET", "").strip()
 MAX_FILE_BYTES = int(os.getenv("MAX_FILE_MB", "500")) * 1024 * 1024
 MAX_DURATION_SECONDS = int(os.getenv("MAX_DURATION_HOURS", "3")) * 3600
 JOB_TTL_SECONDS = int(os.getenv("JOB_TTL_MINUTES", "20")) * 60
@@ -38,7 +49,13 @@ ALLOWED_DOMAINS = (
 
 logger = logging.getLogger("nazzelha")
 
-app = FastAPI(title="Nazzelha - نزّلها", version="1.1.0")
+app = FastAPI(title="Nazzelha - نزّلها", version="1.2.0")
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET or secrets.token_urlsafe(48), same_site="lax", https_only=True, max_age=60 * 60 * 24 * 14)
+oauth = OAuth()
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth.register(name="google", client_id=GOOGLE_CLIENT_ID, client_secret=GOOGLE_CLIENT_SECRET, server_metadata_url="https://accounts.google.com/.well-known/openid-configuration", client_kwargs={"scope": "openid email profile"})
+if FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET:
+    oauth.register(name="facebook", client_id=FACEBOOK_CLIENT_ID, client_secret=FACEBOOK_CLIENT_SECRET, authorize_url="https://www.facebook.com/v20.0/dialog/oauth", access_token_url="https://graph.facebook.com/v20.0/oauth/access_token", api_base_url="https://graph.facebook.com/v20.0/", client_kwargs={"scope": "email,public_profile"})
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 lock = threading.RLock()
 jobs: dict[str, dict] = {}
@@ -65,10 +82,31 @@ def client_ip(request: Request) -> str:
 
 
 def require_auth(request: Request) -> None:
+    if request.session.get("user"):
+        return
     if not APP_PASSWORD:
-        raise HTTPException(status_code=503, detail="إعداد كلمة مرور الأداة غير مكتمل على السيرفر.")
+        raise HTTPException(status_code=401, detail="سجّل الدخول باستخدام Google أو Facebook أو TikTok.")
     if not hmac.compare_digest(request.headers.get("x-app-password", ""), APP_PASSWORD):
-        raise HTTPException(status_code=401, detail="كلمة المرور غير صحيحة أو انتهت الجلسة.")
+        raise HTTPException(status_code=401, detail="سجّل الدخول للمتابعة.")
+
+
+def provider_enabled(provider: str) -> bool:
+    return {
+        "google": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+        "facebook": bool(FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET),
+        "tiktok": bool(TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET),
+    }.get(provider, False)
+
+
+def public_user(request: Request) -> dict | None:
+    user = request.session.get("user")
+    if not isinstance(user, dict):
+        return None
+    return {key: user.get(key) for key in ("id", "name", "email", "avatar", "provider") if user.get(key)}
+
+
+def oauth_redirect_uri(provider: str) -> str:
+    return f"{PUBLIC_BASE_URL}/auth/{provider}/callback"
 
 
 def validate_url(raw_url: str) -> str:
@@ -285,6 +323,85 @@ def service_worker():
 @app.get("/api/health")
 def health():
     return {"ok": True, "app": "nazzelha", "password_configured": bool(APP_PASSWORD)}
+
+
+@app.get("/api/auth/providers")
+def auth_providers():
+    return {"providers": {"google": provider_enabled("google"), "facebook": provider_enabled("facebook"), "tiktok": provider_enabled("tiktok")}, "password": bool(APP_PASSWORD)}
+
+
+@app.get("/api/me")
+def current_user(request: Request):
+    return {"authenticated": bool(public_user(request)), "user": public_user(request)}
+
+
+@app.post("/api/logout")
+def logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/auth/{provider}")
+async def start_social_login(provider: str, request: Request):
+    if not provider_enabled(provider):
+        raise HTTPException(status_code=503, detail=f"تسجيل الدخول بـ {provider} غير مفعّل بعد على السيرفر.")
+    redirect_uri = oauth_redirect_uri(provider)
+    if provider in ("google", "facebook"):
+        return await oauth.create_client(provider).authorize_redirect(request, redirect_uri)
+    state = secrets.token_urlsafe(32)
+    request.session["tiktok_oauth_state"] = state
+    from urllib.parse import urlencode
+    params = {"client_key": TIKTOK_CLIENT_KEY, "response_type": "code", "scope": "user.info.basic", "redirect_uri": redirect_uri, "state": state}
+    return RedirectResponse("https://www.tiktok.com/v2/auth/authorize/?" + urlencode(params))
+
+
+@app.get("/auth/{provider}/callback")
+async def social_login_callback(provider: str, request: Request):
+    if not provider_enabled(provider):
+        raise HTTPException(status_code=503, detail="طريقة تسجيل الدخول غير مفعّلة على السيرفر.")
+    try:
+        if provider in ("google", "facebook"):
+            client = oauth.create_client(provider)
+            token = await client.authorize_access_token(request)
+            if provider == "google":
+                profile = token.get("userinfo")
+                if not profile:
+                    response = await client.get("https://openidconnect.googleapis.com/v1/userinfo", token=token)
+                    response.raise_for_status()
+                    profile = response.json()
+                user = {"id": str(profile.get("sub") or ""), "name": str(profile.get("name") or "مستخدم Google")[:120], "email": str(profile.get("email") or "")[:254], "avatar": str(profile.get("picture") or "")[:2048], "provider": "google"}
+            else:
+                response = await client.get("me", params={"fields": "id,name,email,picture.type(large)"}, token=token)
+                response.raise_for_status()
+                profile = response.json()
+                picture = (profile.get("picture") or {}).get("data") or {}
+                user = {"id": str(profile.get("id") or ""), "name": str(profile.get("name") or "مستخدم Facebook")[:120], "email": str(profile.get("email") or "")[:254], "avatar": str(picture.get("url") or "")[:2048], "provider": "facebook"}
+        elif provider == "tiktok":
+            expected_state = request.session.pop("tiktok_oauth_state", "")
+            if not expected_state or not hmac.compare_digest(expected_state, request.query_params.get("state", "")) or not request.query_params.get("code"):
+                raise HTTPException(status_code=400, detail="تعذّر التحقق من جلسة TikTok. جرّب تسجيل الدخول مرة أخرى.")
+            async with httpx.AsyncClient(timeout=15) as client:
+                token_response = await client.post("https://open.tiktokapis.com/v2/oauth/token/", data={"client_key": TIKTOK_CLIENT_KEY, "client_secret": TIKTOK_CLIENT_SECRET, "code": request.query_params["code"], "grant_type": "authorization_code", "redirect_uri": oauth_redirect_uri("tiktok")}, headers={"Content-Type": "application/x-www-form-urlencoded"})
+                token_response.raise_for_status()
+                access_token = token_response.json().get("access_token")
+                if not access_token:
+                    raise ValueError("TikTok did not return an access token")
+                profile_response = await client.get("https://open.tiktokapis.com/v2/user/info/", params={"fields": "open_id,display_name,avatar_url"}, headers={"Authorization": f"Bearer {access_token}"})
+                profile_response.raise_for_status()
+                profile = (profile_response.json().get("data") or {}).get("user") or {}
+            user = {"id": str(profile.get("open_id") or ""), "name": str(profile.get("display_name") or "مستخدم TikTok")[:120], "email": "", "avatar": str(profile.get("avatar_url") or "")[:2048], "provider": "tiktok"}
+        else:
+            raise HTTPException(status_code=404, detail="طريقة تسجيل الدخول غير معروفة.")
+        if not user.get("id"):
+            raise ValueError("The provider did not return a stable user ID")
+        request.session.clear()
+        request.session["user"] = user
+        return RedirectResponse("/", status_code=303)
+    except HTTPException:
+        raise
+    except (OAuthError, httpx.HTTPError, ValueError, KeyError) as exc:
+        logger.warning("Social login failed for provider=%s: %s", provider, type(exc).__name__)
+        return RedirectResponse("/?auth_error=1", status_code=303)
 
 
 @app.post("/api/auth")
