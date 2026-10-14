@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import logging
 import os
 import secrets
 import shutil
@@ -35,7 +36,10 @@ ALLOWED_DOMAINS = (
     "instagram.com", "instagr.am", "facebook.com", "fb.watch", "tiktok.com",
 )
 
-app = FastAPI(title="Nazzelha - نزّلها", version="1.0.0")
+logger = logging.getLogger("nazzelha")
+YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+
+app = FastAPI(title="Nazzelha - نزّلها", version="1.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 lock = threading.RLock()
 jobs: dict[str, dict] = {}
@@ -108,6 +112,9 @@ def ydl_base_options() -> dict:
         "socket_timeout": 25, "retries": 2, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
+        "retries": 4, "fragment_retries": 4, "extractor_retries": 3,
+        "js_runtimes": {"deno": {}},
+        **({"cookiefile": YTDLP_COOKIES_FILE} if YTDLP_COOKIES_FILE and Path(YTDLP_COOKIES_FILE).is_file() else {}),
     }
 
 
@@ -200,7 +207,9 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
             "progress_hooks": [progress_hook(job_id)], "overwrites": True,
         })
         if quality == "audio":
+            opts["format"] = "bestaudio/best"
             opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]
+            opts["merge_output_format"] = "mp3"
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
         if not isinstance(info, dict):
@@ -219,6 +228,7 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
                     "filename": result_file.name, "filesize": size, "completed_at": time.time(),
                 })
     except Exception as exc:
+        logger.exception("Download failed for platform=%s quality=%s", platform_for(url), quality)
         message = str(exc)
         known = ("حجم الملف أكبر", "مدة الفيديو أطول", "الرابط غير متاح", "Private video", "This video is private", "login", "Sign in", "Unsupported URL", "لم يتم العثور", "تم حذف", "Video unavailable")
         if not any(term.casefold() in message.casefold() for term in known):
@@ -289,8 +299,18 @@ async def video_info(body: URLRequest, request: Request):
         return {"ok": True, **await run_in_threadpool(extract_info, url)}
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=422, detail="مش قادر أقرأ الفيديو. تأكد أن الرابط عام وصحيح، وأن تنزيله مسموح من المنصة.")
+    except Exception as exc:
+        logger.exception("Metadata extraction failed for platform=%s", platform_for(url))
+        detail = str(exc).casefold()
+        if "sign in" in detail or "login" in detail or "cookies" in detail or "private" in detail:
+            message = "المنصة طالبة تسجيل دخول أو الفيديو خاص. جرّب رابطًا عامًا، أو اضبط ملف Cookies موثوقًا في إعدادات السيرفر."
+        elif "javascript" in detail or "js runtime" in detail or "deno" in detail:
+            message = "يوتيوب محتاج تحديث/تشغيل مكوّن JavaScript. أعد النشر بعد تحديث الأداة، ولو استمر الخطأ راجع سجل Render."
+        elif "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail:
+            message = "المنصة أوقفت الطلب مؤقتًا بسبب التحقق أو مكافحة الروبوتات. جرّب لاحقًا أو استخدم Cookies لحسابك إذا كان مسموحًا."
+        else:
+            message = "مش قادر أقرأ الفيديو حاليًا. حدّث الأداة وجرّب رابطًا عامًا مباشرًا؛ تفاصيل الخطأ موجودة في Render Logs."
+        raise HTTPException(status_code=422, detail=message)
 
 
 @app.post("/api/download")
