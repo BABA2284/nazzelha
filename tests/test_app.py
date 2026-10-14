@@ -41,7 +41,8 @@ class NazzelhaAPITests(unittest.TestCase):
         detail = response.json()["detail"]
         self.assertIn("لا ينقل جلسة حسابك", detail)
         self.assertIn("لا تدخل كلمة مرورك", detail)
-        self.assertNotIn("Cookies", detail)
+        self.assertIn("لا تدخل كلمة مرورك أو ترسل ملفات Cookies", detail)
+        self.assertNotIn("اضبط ملف Cookies", detail)
 
     def test_rejects_non_https(self):
         with self.assertRaises(main.HTTPException):
