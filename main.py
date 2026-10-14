@@ -108,14 +108,10 @@ def platform_for(url: str) -> str:
 def ydl_base_options() -> dict:
     return {
         "quiet": True, "no_warnings": True, "noplaylist": True,
-        "socket_timeout": 25, "retries": 2, "fragment_retries": 2,
+        "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
-        "retries": 4, "fragment_retries": 4, "extractor_retries": 3,
-        # Avoid rapid bursts that can trigger rate limits on public providers.
-        "sleep_interval_requests": 1,
-        "sleep_interval": 1,
-        "max_sleep_interval": 3,
+        "extractor_retries": 2,
         "js_runtimes": {"deno": {}},
     }
 
@@ -170,6 +166,9 @@ def progress_hook(job_id: str):
                 })
             elif data.get("status") == "finished":
                 job.update({"progress": 99, "message": "اكتمل التنزيل، جاري تجهيز الملف..."})
+            info = data.get("info_dict") or {}
+            if info.get("title") and not job.get("title"):
+                job["title"] = str(info["title"])[:240]
     return _hook
 
 
@@ -190,23 +189,20 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
     folder = TEMP_ROOT / job_id
     folder.mkdir(parents=True, exist_ok=True)
     try:
-        probe_opts = ydl_base_options()
-        probe_opts.update({"skip_download": True, "extract_flat": False})
-        with yt_dlp.YoutubeDL(probe_opts) as probe:
-            metadata = probe.extract_info(url, download=False)
-        if not isinstance(metadata, dict):
-            raise ValueError("المنصة لم ترجع بيانات فيديو صالحة.")
-        duration = metadata.get("duration")
-        if duration and duration > MAX_DURATION_SECONDS:
-            raise ValueError(f"مدة الفيديو أطول من الحد المسموح ({MAX_DURATION_SECONDS // 3600} ساعات).")
-        with lock:
-            if job_id in jobs:
-                jobs[job_id].update({"title": str(metadata.get("title") or "فيديو")[:240], "message": "تم التعرف على الفيديو، جاري بدء التنزيل..."})
         opts = ydl_base_options()
+        def reject_oversized_or_long(info: dict, *, incomplete: bool) -> str | None:
+            duration = info.get("duration")
+            if duration and duration > MAX_DURATION_SECONDS:
+                return f"مدة الفيديو أطول من الحد المسموح ({MAX_DURATION_SECONDS // 3600} ساعات)."
+            size = info.get("filesize") or info.get("filesize_approx")
+            if size and size > MAX_FILE_BYTES:
+                return f"حجم الملف أكبر من الحد المسموح ({MAX_FILE_BYTES // (1024 * 1024)} ميجابايت)."
+            return None
         opts.update({
             "outtmpl": str(folder / "%(title).100s-%(id)s.%(ext)s"),
             "format": format_selector(quality), "merge_output_format": "mp4",
             "progress_hooks": [progress_hook(job_id)], "overwrites": True,
+            "match_filter": reject_oversized_or_long,
         })
         if quality == "audio":
             opts["format"] = "bestaudio/best"
