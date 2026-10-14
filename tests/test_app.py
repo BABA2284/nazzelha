@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 import main
@@ -23,17 +24,13 @@ class NazzelhaAPITests(unittest.TestCase):
         response = self.client.post("/api/info", json={"url": "https://youtu.be/example"})
         self.assertEqual(response.status_code, 401)
 
-    @patch("main.extract_info", side_effect=RuntimeError("Sign in to confirm you're not a bot"))
-    def test_authenticated_user_gets_youtube_explanation(self, _mock_extract):
-        with self.client as client:
-            with client.session_transaction() as session:
-                session["user"] = {"id": "user-1", "name": "Test User", "provider": "google"}
-                session["auth_version"] = main.AUTH_SESSION_VERSION
-            response = client.post("/api/info", json={"url": "https://www.youtube.com/watch?v=example"})
-            self.assertEqual(response.status_code, 422)
-            detail = response.json()["detail"]
-            self.assertIn("لا تدخل كلمة مرورك", detail)
-
+    @patch("main.public_user", return_value={"id": "user-1", "name": "Test User", "provider": "google"})
+    @patch("main.extract_info", side_effect=RuntimeError("Sign in to confirm you are not a bot"))
+    def test_authenticated_user_gets_youtube_explanation(self, _mock_extract, _mock_user):
+        response = self.client.post("/api/info", json={"url": "https://www.youtube.com/watch?v=example"})
+        self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("لا تدخل كلمة مرورك", detail)
     def test_auth_providers_reports_social_providers_and_no_password(self):
         response = self.client.get("/api/auth/providers")
         self.assertEqual(response.status_code, 200)
@@ -48,13 +45,10 @@ class NazzelhaAPITests(unittest.TestCase):
         self.assertFalse(response.json()["authenticated"])
 
     def test_old_session_without_version_is_rejected(self):
-        with self.client as client:
-            with client.session_transaction() as session:
-                session["user"] = {"id": "old-user", "name": "Old session", "provider": "google"}
-            response = client.post("/api/info", json={"url": "https://youtu.be/example"})
-            self.assertEqual(response.status_code, 401)
-            self.assertFalse(client.get("/api/me").json()["authenticated"])
-
+        old_request = SimpleNamespace(session={"user": {"id": "old-user", "name": "Old session", "provider": "google"}})
+        self.assertIsNone(main.public_user(old_request))
+        with self.assertRaises(main.HTTPException):
+            main.require_auth(old_request)
     def test_social_login_route_does_not_fake_success_when_unconfigured(self):
         response = self.client.get("/auth/google")
         self.assertEqual(response.status_code, 503)
