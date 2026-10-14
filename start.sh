@@ -1,16 +1,20 @@
 #!/bin/sh
 set -eu
 
-PROVIDER_SERVER="/home/appuser/bgutil-ytdlp-pot-provider/server"
+PROVIDER_HOME="/opt/bgutil-pot-provider"
 
-# The provider is bound to loopback only; it is not exposed publicly.
+# Run the PO-token server on loopback only; it is not publicly exposed.
 (
-  cd "$PROVIDER_SERVER/node_modules"
-  deno run --allow-env --allow-net --allow-ffi=. --allow-read=. ../src/main.ts --host 127.0.0.1 --port 4416
+  cd "$PROVIDER_HOME"
+  exec deno run \
+    --allow-env \
+    --allow-net \
+    --allow-ffi="$PROVIDER_HOME/node_modules" \
+    --allow-read="$PROVIDER_HOME/node_modules" \
+    "$PROVIDER_HOME/src/main.ts" --host 127.0.0.1 --port 4416
 ) &
 PROVIDER_PID=$!
 
-# Wait for the local PO-token provider to be ready before starting the web app.
 i=0
 while [ "$i" -lt 30 ]; do
   if python -c 'import socket; s=socket.create_connection(("127.0.0.1", 4416), timeout=0.5); s.close()' >/dev/null 2>&1; then

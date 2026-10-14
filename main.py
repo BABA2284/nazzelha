@@ -147,7 +147,7 @@ def ydl_base_options() -> dict:
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
         # Prefer the mobile-web client so the PO-token provider can supply the
         # required proof-of-origin token for ordinary YouTube video requests.
-        "extractor_args": {"youtube": {"player_client": ["mweb"]}},
+        "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}},
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
         "extractor_retries": 2,
         "js_runtimes": {"deno": {}},
