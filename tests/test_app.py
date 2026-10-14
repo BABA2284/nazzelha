@@ -1,5 +1,6 @@
 import os
 import unittest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 os.environ["APP_PASSWORD"] = "test-password-not-for-production"
@@ -28,6 +29,19 @@ class NazzelhaAPITests(unittest.TestCase):
     def test_info_requires_password(self):
         response = self.client.post("/api/info", json={"url": "https://youtu.be/example"})
         self.assertEqual(response.status_code, 401)
+
+    @patch("main.extract_info", side_effect=RuntimeError("Sign in to confirm you're not a bot"))
+    def test_youtube_bot_check_explains_device_login_is_not_shared(self, _mock_extract):
+        response = self.client.post(
+            "/api/info",
+            json={"url": "https://www.youtube.com/watch?v=example"},
+            headers={"X-App-Password": "test-password-not-for-production"},
+        )
+        self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("لا ينقل جلسة حسابك", detail)
+        self.assertIn("لا تدخل كلمة مرورك", detail)
+        self.assertNotIn("Cookies", detail)
 
     def test_rejects_non_https(self):
         with self.assertRaises(main.HTTPException):
