@@ -1,0 +1,15 @@
+services:
+  nazzelha:
+    build: .
+    container_name: nazzelha
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      MAX_FILE_MB: "500"
+      MAX_DURATION_HOURS: "3"
+      JOB_TTL_MINUTES: "20"
+      MAX_ACTIVE_JOBS_PER_IP: "2"
+      MAX_ACTIVE_JOBS_GLOBAL: "6"
