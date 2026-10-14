@@ -70,10 +70,6 @@ class DownloadRequest(URLRequest):
     quality: str = Field(default="best", pattern="^(best|1080|720|480|audio)$")
 
 
-class AuthRequest(BaseModel):
-    password: str = Field(min_length=1, max_length=512)
-
-
 def client_ip(request: Request) -> str:
     # Behind a trusted hosting proxy, request.client.host is the proxy address.
     # Use the first forwarded value only when the app is deployed behind that proxy.
@@ -81,13 +77,14 @@ def client_ip(request: Request) -> str:
     return forwarded[:64] if forwarded else (request.client.host if request.client else "unknown")
 
 
+AUTH_SESSION_VERSION = 2  # Increment to invalidate all previously issued login sessions.
+
+
 def require_auth(request: Request) -> None:
-    if request.session.get("user"):
+    if public_user(request):
         return
-    if not APP_PASSWORD:
-        raise HTTPException(status_code=401, detail="سجّل الدخول باستخدام Google أو Facebook أو TikTok.")
-    if not hmac.compare_digest(request.headers.get("x-app-password", ""), APP_PASSWORD):
-        raise HTTPException(status_code=401, detail="سجّل الدخول للمتابعة.")
+    request.session.clear()
+    raise HTTPException(status_code=401, detail="انتهت جلسة الدخول. سجّل الدخول مرة أخرى باستخدام Google أو Facebook أو TikTok.")
 
 
 def provider_enabled(provider: str) -> bool:
@@ -100,7 +97,7 @@ def provider_enabled(provider: str) -> bool:
 
 def public_user(request: Request) -> dict | None:
     user = request.session.get("user")
-    if not isinstance(user, dict):
+    if request.session.get("auth_version") != AUTH_SESSION_VERSION or not isinstance(user, dict):
         return None
     return {key: user.get(key) for key in ("id", "name", "email", "avatar", "provider") if user.get(key)}
 
@@ -322,12 +319,12 @@ def service_worker():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": "nazzelha", "password_configured": bool(APP_PASSWORD)}
+    return {"ok": True, "app": "nazzelha", "authentication": "social_login_required"}
 
 
 @app.get("/api/auth/providers")
 def auth_providers():
-    return {"providers": {"google": provider_enabled("google"), "facebook": provider_enabled("facebook"), "tiktok": provider_enabled("tiktok")}, "password": bool(APP_PASSWORD)}
+    return {"providers": {"google": provider_enabled("google"), "facebook": provider_enabled("facebook"), "tiktok": provider_enabled("tiktok")}, "password": False, "registration_required": True}
 
 
 @app.get("/api/me")
@@ -396,6 +393,7 @@ async def social_login_callback(provider: str, request: Request):
             raise ValueError("The provider did not return a stable user ID")
         request.session.clear()
         request.session["user"] = user
+        request.session["auth_version"] = AUTH_SESSION_VERSION
         return RedirectResponse("/", status_code=303)
     except HTTPException:
         raise
@@ -405,12 +403,8 @@ async def social_login_callback(provider: str, request: Request):
 
 
 @app.post("/api/auth")
-def authenticate(body: AuthRequest):
-    if not APP_PASSWORD:
-        raise HTTPException(status_code=503, detail="اضبط APP_PASSWORD في متغيرات السيرفر أولًا.")
-    if not hmac.compare_digest(body.password, APP_PASSWORD):
-        raise HTTPException(status_code=401, detail="كلمة المرور غير صحيحة.")
-    return {"ok": True}
+def authenticate():
+    raise HTTPException(status_code=410, detail="تم إيقاف الدخول بكلمة مرور مشتركة. استخدم التسجيل بحسابك الاجتماعي.")
 
 
 @app.post("/api/info")
