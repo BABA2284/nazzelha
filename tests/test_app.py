@@ -41,6 +41,12 @@ class NazzelhaAPITests(unittest.TestCase):
         with self.assertRaises(main.HTTPException):
             main.validate_url("https://127.0.0.1/video")
 
+    def test_format_selector_audio_uses_audio_stream(self):
+        self.assertEqual(main.format_selector("audio"), "bestaudio/best")
+
+    def test_format_selector_quality_caps_height(self):
+        self.assertIn("height<=720", main.format_selector("720"))
+
     def test_accepts_known_provider_host(self):
         self.assertEqual(main.validate_url("https://youtu.be/example"), "https://youtu.be/example")
 
