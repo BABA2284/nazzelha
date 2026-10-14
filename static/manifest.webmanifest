@@ -1,0 +1,13 @@
+{
+  "name": "نزّلها — فيديوهاتك في مكان واحد",
+  "short_name": "نزّلها",
+  "description": "أداة شخصية لحفظ الفيديوهات التي تملك حق تنزيلها.",
+  "lang": "ar-EG",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101321",
+  "theme_color": "#101321",
+  "icons": [{"src":"/static/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
