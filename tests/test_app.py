@@ -44,6 +44,22 @@ class NazzelhaAPITests(unittest.TestCase):
         self.assertIn("لا تدخل كلمة مرورك أو ترسل ملفات Cookies", detail)
         self.assertNotIn("اضبط ملف Cookies", detail)
 
+
+    def test_auth_providers_reports_disabled_without_credentials(self):
+        response = self.client.get("/api/auth/providers")
+        self.assertEqual(response.status_code, 200)
+        providers = response.json()["providers"]
+        self.assertEqual(set(providers), {"google", "facebook", "tiktok"})
+
+    def test_me_starts_unauthenticated(self):
+        response = self.client.get("/api/me")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["authenticated"])
+
+    def test_social_login_route_does_not_fake_success_when_unconfigured(self):
+        response = self.client.get("/auth/google")
+        self.assertEqual(response.status_code, 503)
+
     def test_rejects_non_https(self):
         with self.assertRaises(main.HTTPException):
             main.validate_url("http://youtube.com/watch?v=example")
