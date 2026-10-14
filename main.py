@@ -37,7 +37,6 @@ ALLOWED_DOMAINS = (
 )
 
 logger = logging.getLogger("nazzelha")
-YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 
 app = FastAPI(title="Nazzelha - نزّلها", version="1.1.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -118,7 +117,6 @@ def ydl_base_options() -> dict:
         "sleep_interval": 1,
         "max_sleep_interval": 3,
         "js_runtimes": {"deno": {}},
-        **({"cookiefile": YTDLP_COOKIES_FILE} if YTDLP_COOKIES_FILE and Path(YTDLP_COOKIES_FILE).is_file() else {}),
     }
 
 
@@ -314,12 +312,12 @@ async def video_info(body: URLRequest, request: Request):
     except Exception as exc:
         logger.exception("Metadata extraction failed for platform=%s", platform_for(url))
         detail = str(exc).casefold()
-        if "sign in" in detail or "login" in detail or "cookies" in detail or "private" in detail:
-            message = "المنصة طالبة تسجيل دخول أو الفيديو خاص. جرّب رابطًا عامًا، أو اضبط ملف Cookies موثوقًا في إعدادات السيرفر."
+        if "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail or "not a bot" in detail:
+            message = "يوتيوب رفض الطلب من السيرفر باعتباره آليًا. تسجيل الدخول إلى YouTube على الآيفون أو الكمبيوتر لا ينقل جلسة حسابك إلى السيرفر. لا تدخل كلمة مرورك أو ترسل ملفات Cookies. افتح الفيديو الأصلي وجرّب لاحقًا؛ وإذا كان الفيديو ملكك، استخدم YouTube Studio لتنزيل نسختك."
         elif "javascript" in detail or "js runtime" in detail or "deno" in detail:
-            message = "يوتيوب محتاج تحديث/تشغيل مكوّن JavaScript. أعد النشر بعد تحديث الأداة، ولو استمر الخطأ راجع سجل Render."
-        elif "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail:
-            message = "يوتيوب رفض طلب السيرفر باعتباره آليًا. الأداة لا تستطيع ضمان قراءة كل الفيديوهات العامة من عنوان السيرفر الحالي؛ جرّب لاحقًا، أو استخدم ملف Cookies خاصًا بك من إعدادات السيرفر مع مراعاة مخاطر الحساب. لا ترسل ملف Cookies لأي شخص."
+            message = "يوتيوب يحتاج إلى مكوّن JavaScript محدث على السيرفر. أعد المحاولة لاحقًا؛ وإذا استمر الخطأ، راجع Render Logs."
+        elif "sign in" in detail or "login" in detail or "cookies" in detail or "private" in detail:
+            message = "الفيديو يتطلب تسجيل دخول أو غير متاح للعامة. الأداة لا تستخدم جلسة YouTube الموجودة على جهازك، ولا تدخل كلمة مرورك هنا. جرّب رابطًا عامًا أو استخدم طريقة التنزيل الرسمية المتاحة."
         else:
             message = "مش قادر أقرأ الفيديو حاليًا. حدّث الأداة وجرّب رابطًا عامًا مباشرًا؛ تفاصيل الخطأ موجودة في Render Logs."
         raise HTTPException(status_code=422, detail=message)
