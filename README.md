@@ -23,7 +23,7 @@ A mobile-first Arabic RTL web app prototype for processing supported public vide
 
 ## Supported providers
 
-The initial backend accepts URL domains for YouTube, Instagram, Facebook, and TikTok. Acceptance of a domain does **not** guarantee that every link works: providers change their systems, and private or login-gated media is not supported. Real end-to-end provider tests have not yet been completed.
+The initial backend accepts URL domains for YouTube, Instagram, Facebook, and TikTok. Acceptance of a domain does **not** guarantee that every link works: providers change their systems, and private or login-gated media is not supported. A YouTube sign-in on the user's device is not passed to this server. The app never asks for Google passwords or user cookie files, and shows a link to open the original video when extraction fails. For videos a user owns, use official YouTube download options such as YouTube Studio when available. Real end-to-end provider tests have not yet been completed.
 
 ## Run locally
 
