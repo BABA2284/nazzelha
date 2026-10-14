@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nazzelha
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_PASSWORD
+        sync: false
+      - key: MAX_FILE_MB
+        value: "500"
+      - key: MAX_DURATION_HOURS
+        value: "3"
+      - key: JOB_TTL_MINUTES
+        value: "20"
+      - key: MAX_ACTIVE_JOBS_PER_IP
+        value: "2"
+      - key: MAX_ACTIVE_JOBS_GLOBAL
+        value: "6"
