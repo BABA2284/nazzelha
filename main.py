@@ -214,7 +214,13 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
             info = ydl.extract_info(url, download=True)
         if not isinstance(info, dict):
             raise ValueError("المنصة لم ترجع ملف فيديو صالحًا.")
-        result_file = find_result_file(folder)
+        if quality == "audio":
+            audio_files = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".mp3" and p.stat().st_size > 0]
+            if not audio_files:
+                raise ValueError("FFmpeg لم ينتج ملف MP3.")
+            result_file = max(audio_files, key=lambda p: p.stat().st_size)
+        else:
+            result_file = find_result_file(folder)
         size = result_file.stat().st_size
         if size <= 0:
             raise ValueError("الملف الناتج فارغ.")
