@@ -113,6 +113,10 @@ def ydl_base_options() -> dict:
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
         "retries": 4, "fragment_retries": 4, "extractor_retries": 3,
+        # Avoid rapid bursts that can trigger rate limits on public providers.
+        "sleep_interval_requests": 1,
+        "sleep_interval": 1,
+        "max_sleep_interval": 3,
         "js_runtimes": {"deno": {}},
         **({"cookiefile": YTDLP_COOKIES_FILE} if YTDLP_COOKIES_FILE and Path(YTDLP_COOKIES_FILE).is_file() else {}),
     }
@@ -236,9 +240,11 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
     except Exception as exc:
         logger.exception("Download failed for platform=%s quality=%s", platform_for(url), quality)
         message = str(exc)
-        known = ("حجم الملف أكبر", "مدة الفيديو أطول", "الرابط غير متاح", "Private video", "This video is private", "login", "Sign in", "Unsupported URL", "لم يتم العثور", "تم حذف", "Video unavailable")
+        known = ("حجم الملف أكبر", "مدة الفيديو أطول", "الرابط غير متاح", "Private video", "This video is private", "login", "Sign in", "Unsupported URL", "لم يتم العثور", "تم حذف", "Video unavailable", "not a bot", "captcha", "PO Token", "verification")
         if not any(term.casefold() in message.casefold() for term in known):
             message = "تعذّر تنزيل الرابط. قد يكون خاصًا أو يحتاج تسجيل دخول أو أن المنصة غيّرت طريقة الوصول."
+        elif "not a bot" in message.casefold() or "captcha" in message.casefold() or "po token" in message.casefold() or "verification" in message.casefold():
+            message = "يوتيوب رفض طلب السيرفر باعتباره آليًا. جرّب لاحقًا؛ بعض الفيديوهات العامة لا يمكن استخراجها من بيئة الاستضافة الحالية دون تحقق إضافي."
         elif len(message) > 220:
             message = message[:220]
         with lock:
@@ -313,7 +319,7 @@ async def video_info(body: URLRequest, request: Request):
         elif "javascript" in detail or "js runtime" in detail or "deno" in detail:
             message = "يوتيوب محتاج تحديث/تشغيل مكوّن JavaScript. أعد النشر بعد تحديث الأداة، ولو استمر الخطأ راجع سجل Render."
         elif "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail:
-            message = "المنصة أوقفت الطلب مؤقتًا بسبب التحقق أو مكافحة الروبوتات. جرّب لاحقًا أو استخدم Cookies لحسابك إذا كان مسموحًا."
+            message = "يوتيوب رفض طلب السيرفر باعتباره آليًا. الأداة لا تستطيع ضمان قراءة كل الفيديوهات العامة من عنوان السيرفر الحالي؛ جرّب لاحقًا، أو استخدم ملف Cookies خاصًا بك من إعدادات السيرفر مع مراعاة مخاطر الحساب. لا ترسل ملف Cookies لأي شخص."
         else:
             message = "مش قادر أقرأ الفيديو حاليًا. حدّث الأداة وجرّب رابطًا عامًا مباشرًا؛ تفاصيل الخطأ موجودة في Render Logs."
         raise HTTPException(status_code=422, detail=message)
