@@ -14,6 +14,23 @@
 - الحد الافتراضي للملف 500 ميجابايت، والمدة 3 ساعات، وتُحذف ملفات التنزيل المؤقتة بعد 20 دقيقة.
 - التنزيلات تُحفظ مؤقتًا على السيرفر أولًا ثم تُنزّل إلى الآيفون. استخدم HTTPS فقط، ولا تضع بيانات دخول المنصات في الأداة.
 
+## تسجيل الدخول والتسجيل الاجتماعي
+
+تظهر أزرار Google وFacebook وTikTok بعد ضبط بيانات المطوّر لكل مزوّد في إعدادات Render. سجّل عناوين العودة التالية حرفيًا في لوحات المطوّرين:
+
+- Google: `https://nazzelha.onrender.com/auth/google/callback`
+- Facebook: `https://nazzelha.onrender.com/auth/facebook/callback`
+- TikTok Login Kit: `https://nazzelha.onrender.com/auth/tiktok/callback`
+
+اضبط `SESSION_SECRET` على قيمة عشوائية طويلة، وتأكد من `PUBLIC_BASE_URL=https://nazzelha.onrender.com`، ثم أضف المفاتيح السرية كمتغيرات بيئة في Render فقط: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`.
+
+- Google: أنشئ OAuth Client من نوع Web application في Google Cloud Console وأضف عنوان العودة إلى Authorized redirect URIs.
+- Facebook: فعّل Facebook Login في Meta for Developers واضبط Valid OAuth Redirect URIs.
+- TikTok: فعّل Login Kit for Web في TikTok for Developers وسجّل عنوان العودة الثابت أعلاه.
+- بعد حفظ المتغيرات، أعد نشر الخدمة. حالة تفعيل الأزرار تُقرأ من `/api/auth/providers`.
+- لا تضع أسرار OAuth في الواجهة أو المستودع. تسجيل الدخول هنا خاص بحساب موقع نزّلها، ولا ينقل جلسة الحساب إلى YouTube أو يوفّر Cookies للتنزيل.
+- هذا الإصدار ينشئ جلسة دخول للموقع اعتمادًا على هوية المزوّد؛ لا يتضمن بعد قاعدة بيانات دائمة لملفات المستخدمين.
+
 ## تشغيل محلي باستخدام Docker
 
 1. انسخ `.env.example` إلى ملف جديد اسمه `.env`.
