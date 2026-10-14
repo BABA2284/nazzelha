@@ -7,6 +7,22 @@ services:
     envVars:
       - key: APP_PASSWORD
         sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PUBLIC_BASE_URL
+        value: https://nazzelha.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_CLIENT_ID
+        sync: false
+      - key: FACEBOOK_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
       - key: MAX_FILE_MB
         value: "500"
       - key: MAX_DURATION_HOURS
