@@ -145,9 +145,10 @@ def ydl_base_options() -> dict:
         "quiet": True, "no_warnings": True, "noplaylist": True,
         "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
-        # Prefer the mobile-web client so the PO-token provider can supply the
-        # required proof-of-origin token for ordinary YouTube video requests.
-        "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}},
+        # The installed bgutil provider is configured for mweb. Mixing clients
+        # can select formats whose PO-token requirements the provider cannot meet.
+        # Keep the request on mweb so the provider can supply a matching GVS token.
+        "extractor_args": {"youtube": {"player_client": ["mweb"]}},
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
         "extractor_retries": 2,
         "js_runtimes": {"deno": {}},
