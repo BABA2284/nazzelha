@@ -140,16 +140,45 @@ def platform_for(url: str) -> str:
     return "رابط فيديو"
 
 
+class YtDlpDiagnosticLogger:
+    """Write only YouTube player/PO-token diagnostics to Render logs."""
+
+    _MARKERS = (
+        "po token", "pot:bgutil", "player response", "login_required",
+        "sign in to confirm", "generating a ", "base_url", "error reaching",
+        "js challenge providers", "plugin directories", "js runtimes",
+        "failed to extract any player response",
+    )
+
+    def _write(self, level: int, message: object) -> None:
+        value = str(message or "").strip()
+        if not value:
+            return
+        lowered = value.casefold()
+        if level >= logging.WARNING or any(marker in lowered for marker in self._MARKERS):
+            logger.log(level, "yt-dlp: %s", value[:1400])
+
+    def debug(self, message: object) -> None:
+        self._write(logging.INFO, message)
+
+    def warning(self, message: object) -> None:
+        self._write(logging.WARNING, message)
+
+    def error(self, message: object) -> None:
+        self._write(logging.ERROR, message)
+
+
 def ydl_base_options() -> dict:
     return {
-        "quiet": True, "no_warnings": True, "noplaylist": True,
+        "quiet": True, "no_warnings": False, "verbose": True,
+        "logger": YtDlpDiagnosticLogger(),
+        "noplaylist": True,
         "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
-        # The installed bgutil provider is configured for mweb. Mixing clients
-        # can select formats whose PO-token requirements the provider cannot meet.
-        # Keep the request on mweb so the provider can supply a matching GVS token.
+        # Official yt-dlp guidance recommends trying fallback clients when mweb
+        # fails before the PO-token provider is reached.
         "extractor_args": {
-            "youtube": {"player_client": ["mweb"]},
+            "youtube": {"player_client": ["mweb", "tv", "web_safari"]},
             # Explicitly point the bgutil plugin at the local provider process.
             "youtubepot-bgutilhttp": {"base_url": ["http://127.0.0.1:4416"]},
         },
