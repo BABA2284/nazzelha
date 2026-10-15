@@ -10,7 +10,7 @@ COPY --from=pot-provider /app /opt/bgutil-pot-provider
 
 WORKDIR /app
 COPY requirements.txt ./requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt && pip install --pre --upgrade "yt-dlp[default]"
 COPY main.py ./main.py
 COPY static ./static
 COPY start.sh ./start.sh
