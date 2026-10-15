@@ -170,7 +170,7 @@ class YtDlpDiagnosticLogger:
 
 def ydl_base_options() -> dict:
     return {
-        "quiet": True, "no_warnings": False, "verbose": True,
+        "quiet": False, "no_warnings": False, "verbose": True,
         "logger": YtDlpDiagnosticLogger(),
         "noplaylist": True,
         "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
