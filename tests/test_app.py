@@ -20,9 +20,11 @@ class NazzelhaAPITests(unittest.TestCase):
         response = self.client.post("/api/auth", json={"password": "anything"})
         self.assertEqual(response.status_code, 410)
 
-    def test_info_requires_social_login(self):
+    @patch("main.extract_info", return_value={"title": "Public video", "thumbnail": "", "duration": 30, "uploader": "Channel", "platform": "YouTube"})
+    def test_public_video_info_does_not_require_account_login(self, _mock_extract):
         response = self.client.post("/api/info", json={"url": "https://youtu.be/example"})
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["title"], "Public video")
 
     @patch("main.public_user", return_value={"id": "user-1", "name": "Test User", "provider": "google"})
     @patch("main.extract_info", side_effect=RuntimeError("Sign in to confirm you are not a bot"))
