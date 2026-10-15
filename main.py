@@ -323,12 +323,12 @@ def service_worker():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "app": "nazzelha", "authentication": "social_login_required"}
+    return {"ok": True, "app": "nazzelha", "authentication": "not_required"}
 
 
 @app.get("/api/auth/providers")
 def auth_providers():
-    return {"providers": {"google": provider_enabled("google"), "facebook": provider_enabled("facebook"), "tiktok": provider_enabled("tiktok")}, "password": False, "registration_required": True}
+    return {"providers": {"google": provider_enabled("google"), "facebook": provider_enabled("facebook"), "tiktok": provider_enabled("tiktok")}, "password": False, "registration_required": False}
 
 
 @app.get("/api/me")
