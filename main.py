@@ -148,7 +148,7 @@ def ydl_base_options() -> dict:
         # The installed bgutil provider is configured for mweb. Mixing clients
         # can select formats whose PO-token requirements the provider cannot meet.
         # Keep the request on mweb so the provider can supply a matching GVS token.
-        "extractor_args": {"youtube": {"player_client": ["mweb"]}},
+        "extractor_args": {"youtube": {"player_client": ["mweb", "tv", "web_safari"]}},
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
         "extractor_retries": 2,
         "js_runtimes": {"deno": {}},
