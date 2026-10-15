@@ -67,15 +67,25 @@ class NazzelhaAPITests(unittest.TestCase):
         with self.assertRaises(main.HTTPException):
             main.validate_url("https://127.0.0.1/video")
 
-    def test_youtube_uses_fallback_clients_and_local_po_token_provider(self):
+    def test_youtube_uses_single_tv_client_and_local_po_token_provider(self):
         options = main.ydl_base_options()
-        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["mweb", "tv", "web_safari"])
+        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["tv"])
         self.assertEqual(
             options["extractor_args"]["youtubepot-bgutilhttp"]["base_url"],
             ["http://127.0.0.1:4416"],
         )
         self.assertTrue(options["verbose"])
         self.assertFalse(options["quiet"])
+
+    @patch("main.extract_info", side_effect=RuntimeError("HTTP Error 429: Too Many Requests"))
+    def test_youtube_429_has_clear_rate_limit_message(self, _mock_extract):
+        response = self.client.post("/api/info", json={"url": "https://www.youtube.com/watch?v=example"})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("فرض حدًا مؤقتًا", response.json()["detail"])
+
+    def test_youtube_throttle_configuration_is_conservative(self):
+        self.assertGreaterEqual(main.YOUTUBE_MIN_REQUEST_INTERVAL, 5)
+        self.assertGreaterEqual(main.YOUTUBE_COOLDOWN_SECONDS, 60)
 
     def test_format_selector_audio_uses_audio_stream(self):
         self.assertEqual(main.format_selector("audio"), "bestaudio/best")
