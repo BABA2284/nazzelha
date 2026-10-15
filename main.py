@@ -413,7 +413,6 @@ def authenticate():
 
 @app.post("/api/info")
 async def video_info(body: URLRequest, request: Request):
-    require_auth(request)
     cleanup_expired()
     url = validate_url(body.url)
     try:
@@ -436,7 +435,6 @@ async def video_info(body: URLRequest, request: Request):
 
 @app.post("/api/download")
 def create_download(body: DownloadRequest, request: Request):
-    require_auth(request)
     cleanup_expired()
     url = validate_url(body.url)
     ip = client_ip(request)
@@ -457,7 +455,6 @@ def create_download(body: DownloadRequest, request: Request):
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str, request: Request):
-    require_auth(request)
     cleanup_expired()
     with lock:
         job = jobs.get(job_id)
@@ -468,7 +465,6 @@ def job_status(job_id: str, request: Request):
 
 @app.get("/api/jobs/{job_id}/file-ticket")
 def issue_download_ticket(job_id: str, request: Request, response: Response):
-    require_auth(request)
     cleanup_expired()
     with lock:
         job = jobs.get(job_id)
