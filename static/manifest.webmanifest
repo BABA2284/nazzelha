@@ -7,11 +7,11 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#101321",
-  "theme_color": "#f52f45",
+  "background_color": "#080911",
+  "theme_color": "#ff3155",
   "icons": [
     {
-      "src": "/static/icon.svg?v=2",
+      "src": "/static/icon.svg?v=3",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
