@@ -67,9 +67,9 @@ class NazzelhaAPITests(unittest.TestCase):
         with self.assertRaises(main.HTTPException):
             main.validate_url("https://127.0.0.1/video")
 
-    def test_youtube_uses_single_tv_client_and_local_po_token_provider(self):
+    def test_youtube_uses_mweb_client_and_local_po_token_provider(self):
         options = main.ydl_base_options()
-        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["tv"])
+        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["mweb"])
         self.assertEqual(
             options["extractor_args"]["youtubepot-bgutilhttp"]["base_url"],
             ["http://127.0.0.1:4416"],
