@@ -10,6 +10,7 @@ import threading
 import time
 import httpx
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -48,6 +49,70 @@ ALLOWED_DOMAINS = (
 )
 
 logger = logging.getLogger("nazzelha")
+
+# YouTube has recently returned both HTTP 429 and anti-bot responses to this
+# hosted service. Keep requests serialized and pause after a refusal instead
+# of repeatedly hitting the same egress IP.
+YOUTUBE_MIN_REQUEST_INTERVAL = max(5, int(os.getenv("YOUTUBE_MIN_REQUEST_INTERVAL", "10")))
+YOUTUBE_COOLDOWN_SECONDS = max(60, int(os.getenv("YOUTUBE_COOLDOWN_SECONDS", "900")))
+_youtube_call_lock = threading.Lock()
+_youtube_state_lock = threading.Lock()
+_youtube_last_call_at = 0.0
+_youtube_blocked_until = 0.0
+
+
+class YouTubeCooldownError(RuntimeError):
+    pass
+
+
+@contextmanager
+def youtube_call_guard(url: str):
+    if platform_for(url) != "YouTube":
+        yield
+        return
+    global _youtube_last_call_at
+    with _youtube_call_lock:
+        now = time.monotonic()
+        with _youtube_state_lock:
+            remaining = _youtube_blocked_until - now
+            last_call = _youtube_last_call_at
+        if remaining > 0:
+            raise YouTubeCooldownError(
+                f"YouTube is temporarily rate-limited; retry in about {int(remaining)} seconds."
+            )
+        delay = YOUTUBE_MIN_REQUEST_INTERVAL - (now - last_call)
+        if delay > 0:
+            time.sleep(delay)
+        with _youtube_state_lock:
+            now = time.monotonic()
+            remaining = _youtube_blocked_until - now
+            if remaining > 0:
+                raise YouTubeCooldownError(
+                    f"YouTube is temporarily rate-limited; retry in about {int(remaining)} seconds."
+                )
+            _youtube_last_call_at = now
+        yield
+
+
+def note_youtube_failure(url: str, exc: Exception) -> None:
+    global _youtube_blocked_until
+    if platform_for(url) != "YouTube":
+        return
+    detail = str(exc).casefold()
+    if not any(term in detail for term in (
+        "429", "too many requests", "sign in to confirm", "not a bot",
+        "captcha", "temporarily rate-limited",
+    )):
+        return
+    with _youtube_state_lock:
+        _youtube_blocked_until = max(
+            _youtube_blocked_until,
+            time.monotonic() + YOUTUBE_COOLDOWN_SECONDS,
+        )
+    logger.warning(
+        "YouTube requests paused for %s seconds after rate-limit/anti-bot refusal; no cookies or credentials were used.",
+        YOUTUBE_COOLDOWN_SECONDS,
+    )
 
 app = FastAPI(title="Nazzelha - نزّلها", version="1.2.0")
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET or secrets.token_urlsafe(48), same_site="lax", https_only=True, max_age=60 * 60 * 24 * 14)
@@ -175,11 +240,11 @@ def ydl_base_options() -> dict:
         "noplaylist": True,
         "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
-        # Official yt-dlp guidance recommends trying fallback clients when mweb
-        # fails before the PO-token provider is reached.
+        # Use a single supported client to avoid multiplying requests when
+        # YouTube is already rate-limiting this hosting IP. The tv client does
+        # not require a GVS PO token; other platforms remain unchanged.
         "extractor_args": {
-            "youtube": {"player_client": ["mweb", "tv", "web_safari"]},
-            # Explicitly point the bgutil plugin at the local provider process.
+            "youtube": {"player_client": ["tv"]},
             "youtubepot-bgutilhttp": {"base_url": ["http://127.0.0.1:4416"]},
         },
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
@@ -191,8 +256,13 @@ def ydl_base_options() -> dict:
 def extract_info(url: str) -> dict:
     opts = ydl_base_options()
     opts.update({"skip_download": True, "extract_flat": False})
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        data = ydl.extract_info(url, download=False)
+    try:
+        with youtube_call_guard(url):
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                data = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        note_youtube_failure(url, exc)
+        raise
     if not isinstance(data, dict):
         raise ValueError("لم يتم العثور على بيانات فيديو صالحة.")
     duration = data.get("duration")
@@ -280,8 +350,9 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
             opts["format"] = "bestaudio/best"
             opts["postprocessors"] = [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}]
             opts["merge_output_format"] = "mp3"
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        with youtube_call_guard(url):
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
         if not isinstance(info, dict):
             raise ValueError("المنصة لم ترجع ملف فيديو صالحًا.")
         if quality == "audio":
@@ -304,13 +375,14 @@ def perform_download(job_id: str, url: str, quality: str) -> None:
                     "filename": result_file.name, "filesize": size, "completed_at": time.time(),
                 })
     except Exception as exc:
+        note_youtube_failure(url, exc)
         logger.exception("Download failed for platform=%s quality=%s", platform_for(url), quality)
         message = str(exc)
-        known = ("حجم الملف أكبر", "مدة الفيديو أطول", "الرابط غير متاح", "Private video", "This video is private", "login", "Sign in", "Unsupported URL", "لم يتم العثور", "تم حذف", "Video unavailable", "not a bot", "captcha", "PO Token", "verification")
+        known = ("حجم الملف أكبر", "مدة الفيديو أطول", "الرابط غير متاح", "Private video", "This video is private", "login", "Sign in", "Unsupported URL", "لم يتم العثور", "تم حذف", "Video unavailable", "not a bot", "captcha", "PO Token", "verification", "429", "too many requests", "temporarily rate-limited")
         if not any(term.casefold() in message.casefold() for term in known):
             message = "تعذّر تنزيل الرابط. قد يكون خاصًا أو يحتاج تسجيل دخول أو أن المنصة غيّرت طريقة الوصول."
-        elif "not a bot" in message.casefold() or "captcha" in message.casefold() or "po token" in message.casefold() or "verification" in message.casefold():
-            message = "يوتيوب رفض طلب السيرفر باعتباره آليًا. جرّب لاحقًا؛ بعض الفيديوهات العامة لا يمكن استخراجها من بيئة الاستضافة الحالية دون تحقق إضافي."
+        elif any(term in message.casefold() for term in ("429", "too many requests", "temporarily rate-limited", "not a bot", "captcha", "po token", "verification")):
+            message = "يوتيوب فرض حدًا مؤقتًا أو رفض طلبات السيرفر. أوقفنا محاولات يوتيوب مؤقتًا لتجنب زيادة الحظر؛ انتظر قليلًا ثم جرّب مرة واحدة. تسجيل الدخول على جهازك لا ينقل الجلسة إلى السيرفر، ولا ترسل Cookies."
         elif len(message) > 220:
             message = message[:220]
         with lock:
@@ -455,7 +527,9 @@ async def video_info(body: URLRequest, request: Request):
     except Exception as exc:
         logger.exception("Metadata extraction failed for platform=%s", platform_for(url))
         detail = str(exc).casefold()
-        if "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail or "not a bot" in detail:
+        if any(term in detail for term in ("429", "too many requests", "temporarily rate-limited")):
+            message = "يوتيوب فرض حدًا مؤقتًا على طلبات السيرفر أو قيّد عنوان IP الخاص بالاستضافة. أوقفنا المحاولات مؤقتًا لتجنب زيادة الحظر؛ انتظر قليلًا ثم جرّب مرة واحدة."
+        elif "bot" in detail or "captcha" in detail or "po token" in detail or "verification" in detail or "not a bot" in detail:
             message = "يوتيوب رفض الطلب من السيرفر باعتباره آليًا. تسجيل الدخول إلى YouTube على الآيفون أو الكمبيوتر لا ينقل جلسة حسابك إلى السيرفر. لا تدخل كلمة مرورك أو ترسل ملفات Cookies. افتح الفيديو الأصلي وجرّب لاحقًا؛ وإذا كان الفيديو ملكك، استخدم YouTube Studio لتنزيل نسختك."
         elif "javascript" in detail or "js runtime" in detail or "deno" in detail:
             message = "يوتيوب يحتاج إلى مكوّن JavaScript محدث على السيرفر. أعد المحاولة لاحقًا؛ وإذا استمر الخطأ، راجع Render Logs."
