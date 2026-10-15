@@ -239,11 +239,11 @@ def ydl_base_options() -> dict:
         "noplaylist": True,
         "socket_timeout": 15, "retries": 1, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
-        # Use a single supported client to avoid multiplying requests when
-        # YouTube is already rate-limiting this hosting IP. The tv client does
-        # not require a GVS PO token; other platforms remain unchanged.
+        # Use the currently recommended mweb client with the installed bgutil PO-token
+        # provider. A single client limits request volume while the provider
+        # generates matching GVS tokens; other platforms remain unchanged.
         "extractor_args": {
-            "youtube": {"player_client": ["tv"]},
+            "youtube": {"player_client": ["mweb"]},
             "youtubepot-bgutilhttp": {"base_url": ["http://127.0.0.1:4416"]},
         },
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
