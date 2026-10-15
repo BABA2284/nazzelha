@@ -27,6 +27,34 @@ html{scroll-behavior:smooth;background:var(--bg);scroll-padding-top:90px}body{ba
 
 /* Use clean brand-mark assets instead of improvised text or hand-drawn glyphs */
 .platform .picon img{display:block;width:28px;height:28px;object-fit:contain}.platform[data-p="youtube"] .picon{background:#ff0033}.platform[data-p="tiktok"] .picon{background:#08090c}.platform[data-p="instagram"] .picon{background:linear-gradient(135deg,#833ab4,#fd1d1d 55%,#fcb045)}.platform[data-p="facebook"] .picon{background:#0866ff}
+
+/* Final responsive QA fixes: prevent horizontal overflow and desktop nav overlap */
+html,body{max-width:100%;overflow-x:clip}
+img,svg,video,canvas{max-width:100%}
+@media(min-width:900px){
+  /* The header already provides desktop navigation; keep the mobile dock off desktop. */
+  .bottomnav{display:none!important}
+  .app{width:min(calc(100% - 48px),1160px);padding:22px 0 44px}
+  .topbar{box-sizing:border-box;width:calc(100% + max(48px, calc(100vw - 1160px)));max-width:100vw;margin-left:calc((min(100vw - 48px,1160px) - 100vw)/2);margin-right:calc((min(100vw - 48px,1160px) - 100vw)/2);padding-left:max(24px,calc((100vw - 1160px)/2));padding-right:max(24px,calc((100vw - 1160px)/2))}
+  .hero{min-height:260px;margin-top:22px;margin-bottom:20px}
+  .hero-art{height:250px}
+  .download-panel{scroll-margin-top:24px}
+}
+@media(max-width:899px){
+  html,body{overflow-x:clip}
+  .app{padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+  .bottomnav{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .view{scroll-margin-bottom:100px}
+}
+@media(max-width:540px){
+  .app{width:calc(100% - 24px)}
+  .hero-art{max-width:100%;overflow:visible}
+  .download-panel{padding:14px}
+  .download-panel form{min-width:0}
+  .urlbox{min-width:0}
+  .urlbox input{width:100%;min-width:0}
+}
+
 </style>
 </head>
 <body>
