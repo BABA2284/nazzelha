@@ -69,7 +69,7 @@ class NazzelhaAPITests(unittest.TestCase):
 
     def test_youtube_uses_only_mweb_client_for_po_token_provider(self):
         options = main.ydl_base_options()
-        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["mweb", "tv", "web_safari"])
+        self.assertEqual(options["extractor_args"]["youtube"]["player_client"], ["mweb"])
 
     def test_format_selector_audio_uses_audio_stream(self):
         self.assertEqual(main.format_selector("audio"), "bestaudio/best")
