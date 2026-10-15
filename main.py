@@ -96,12 +96,11 @@ def youtube_call_guard(url: str):
 
 def note_youtube_failure(url: str, exc: Exception) -> None:
     global _youtube_blocked_until
-    if platform_for(url) != "YouTube":
+    if platform_for(url) != "YouTube" or isinstance(exc, YouTubeCooldownError):
         return
     detail = str(exc).casefold()
     if not any(term in detail for term in (
-        "429", "too many requests", "sign in to confirm", "not a bot",
-        "captcha", "temporarily rate-limited",
+        "429", "too many requests", "sign in to confirm", "not a bot", "captcha",
     )):
         return
     with _youtube_state_lock:
@@ -238,7 +237,7 @@ def ydl_base_options() -> dict:
         "quiet": False, "no_warnings": False, "verbose": True,
         "logger": YtDlpDiagnosticLogger(),
         "noplaylist": True,
-        "socket_timeout": 15, "retries": 2, "fragment_retries": 2,
+        "socket_timeout": 15, "retries": 1, "fragment_retries": 2,
         "cachedir": False, "ignoreerrors": False, "restrictfilenames": True,
         # Use a single supported client to avoid multiplying requests when
         # YouTube is already rate-limiting this hosting IP. The tv client does
@@ -248,7 +247,7 @@ def ydl_base_options() -> dict:
             "youtubepot-bgutilhttp": {"base_url": ["http://127.0.0.1:4416"]},
         },
         "trim_file_name": 120, "max_filesize": MAX_FILE_BYTES,
-        "extractor_retries": 2,
+        "extractor_retries": 1,
         "js_runtimes": {"deno": {}},
     }
 
