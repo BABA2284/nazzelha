@@ -75,6 +75,7 @@ class NazzelhaAPITests(unittest.TestCase):
             ["http://127.0.0.1:4416"],
         )
         self.assertTrue(options["verbose"])
+        self.assertFalse(options["quiet"])
 
     def test_format_selector_audio_uses_audio_stream(self):
         self.assertEqual(main.format_selector("audio"), "bestaudio/best")
