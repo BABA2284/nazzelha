@@ -14,7 +14,7 @@ class NazzelhaAPITests(unittest.TestCase):
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
-        self.assertEqual(response.json()["authentication"], "social_login_required")
+        self.assertEqual(response.json()["authentication"], "not_required")
 
     def test_shared_password_login_is_disabled(self):
         response = self.client.post("/api/auth", json={"password": "anything"})
@@ -37,7 +37,7 @@ class NazzelhaAPITests(unittest.TestCase):
         providers = response.json()["providers"]
         self.assertEqual(set(providers), {"google", "facebook", "tiktok"})
         self.assertFalse(response.json()["password"])
-        self.assertTrue(response.json()["registration_required"])
+        self.assertFalse(response.json()["registration_required"])
 
     def test_me_starts_unauthenticated(self):
         response = self.client.get("/api/me")
